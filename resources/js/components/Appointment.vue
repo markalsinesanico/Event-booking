@@ -29,7 +29,7 @@
       </p>
       
       <!-- Admin Users Section -->
-      <h3 class="admin-users-title">Our Event Administrators - Click to View Their Venues</h3>
+      <h3 class="admin-users-title">Click to View Their Venues</h3>
       <div class="admin-users">
         <router-link 
           v-for="admin in adminUsers" 

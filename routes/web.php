@@ -43,7 +43,7 @@ Route::group(['middleware' => ['web']], function () {
         Route::get('/api/user/booking', [BookingController::class, 'getUserBooking']);
 
         // Booking routes
-        Route::get('/booking/user/{userId}', [BookingController::class, 'getUserBooking']);
+        Route::get('/api/booking/user/{userId}', [BookingController::class, 'getUserBookings']);
         Route::post('/booking', [BookingController::class, 'store']);
 
         Route::middleware(['auth:sanctum', \App\Http\Middleware\AdminMiddleware::class])->group(function () {
@@ -51,6 +51,8 @@ Route::group(['middleware' => ['web']], function () {
             Route::put('/api/admin/booking/{id}/status', [BookingController::class, 'updateBookingStatus']);
             Route::delete('/api/admin/booking/{id}', [BookingController::class, 'deleteBooking']);
         });
+
+        Route::get('/api/venue/{venueId}/booked-dates', [BookingController::class, 'getBookedDates']);
     });
 });
 

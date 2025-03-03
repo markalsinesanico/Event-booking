@@ -16,16 +16,7 @@
         </ul>
 
         <!-- Profile Dropdown -->
-        <div class="profile" @click="toggleDropdown">
-          <img src="/img/Profile.png" alt="Profile Picture" />
-          <span class="arrow"><i class="fas fa-chevron-down"></i></span>
-          <!-- Dropdown Menu -->
-          <div v-if="dropdownVisible" class="dropdown-menu">
-            <router-link to="/customerprofile">Profile</router-link>
-            <router-link to="/receipt">Receipt</router-link>
-            <router-link to="/logout">Log Out</router-link>
-          </div>
-        </div>
+        <ProfileDropdown />
       </nav>
     </header>
 
@@ -68,11 +59,26 @@
           </div>
           <div class="form-group">
             <label>Start Date</label>
-            <input type="date" v-model="form.startDate" required />
+            <input 
+              type="date" 
+              v-model="form.startDate"
+              :min="getCurrentDate()"
+              :class="{ 'date-booked': isDateBooked(form.startDate) }"
+              @change="validateDates"
+              @click="fetchBookedDates"
+              required 
+            />
           </div>
           <div class="form-group">
             <label>End Date</label>
-            <input type="date" v-model="form.endDate" required />
+            <input 
+              type="date" 
+              v-model="form.endDate"
+              :min="form.startDate || getCurrentDate()"
+              :class="{ 'date-booked': isDateBooked(form.endDate) }"
+              @change="validateDates"
+              required 
+            />
           </div>
         </div>
         <div v-if="error" class="error-message">
@@ -90,18 +96,24 @@
 </template>
 
 <script>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import axios from 'axios';
+import { useProfileStore } from '@/store/profileStore';
+import ProfileDropdown from '@/components/ProfileDropdown.vue';
 
 export default {
   name: 'Booking',
+  components: {
+    ProfileDropdown
+  },
   setup() {
     const route = useRoute();
     const venueId = route.params.venueId;
     const successMessage = ref('');
     const dropdownVisible = ref(false);
     const error = ref('');
+    const bookedDates = ref([]);
 
     const form = ref({
       name: '',
@@ -117,13 +129,29 @@ export default {
       try {
         error.value = '';
         
-        // Basic validation
-        if (!form.value.startDate || !form.value.endDate) {
-          error.value = 'Please select both start and end dates';
+        if (isDateBooked(form.value.startDate) || isDateBooked(form.value.endDate)) {
+          error.value = 'Please select available dates';
           return;
         }
+        
+        // Format dates to include time
+        const startDate = new Date(form.value.startDate);
+        startDate.setHours(0, 0, 0, 0);
+        
+        const endDate = new Date(form.value.endDate);
+        endDate.setHours(23, 59, 59, 999);
 
-        const response = await axios.post('/api/bookings', form.value, {
+        const formData = {
+          name: form.value.name,
+          email: form.value.email,
+          phone: form.value.phone,
+          category: form.value.category,
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          venueId: form.value.venueId
+        };
+
+        const response = await axios.post('/api/booking', formData, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`,
             'Content-Type': 'application/json',
@@ -133,6 +161,14 @@ export default {
 
         if (response.data.status === 'success') {
           successMessage.value = 'Your appointment has been successfully submitted!';
+          
+          // Make sure user data is stored in localStorage
+          const userData = {
+            id: response.data.booking.user_id,
+            // other user data if needed
+          };
+          localStorage.setItem('user_data', JSON.stringify(userData));
+          
           setTimeout(() => {
             successMessage.value = '';
             window.location.href = '/receipt';
@@ -152,14 +188,86 @@ export default {
       dropdownVisible.value = !dropdownVisible.value;
     };
 
-    return { 
-      form, 
+    const isDateBooked = (date) => {
+      if (!date || !bookedDates.value.length) return false;
+      
+      const checkDate = new Date(date);
+      checkDate.setHours(0, 0, 0, 0); // Normalize time to start of day
+      
+      return bookedDates.value.some(booking => {
+        const startDate = new Date(booking.start_date);
+        const endDate = new Date(booking.end_date);
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
+        
+        return checkDate >= startDate && checkDate <= endDate;
+      });
+    };
+
+    const getCurrentDate = () => {
+      return new Date().toISOString().split('T')[0];
+    };
+
+    const validateDates = () => {
+      if (!form.value.startDate || !form.value.endDate) return;
+
+      const start = new Date(form.value.startDate);
+      const end = new Date(form.value.endDate);
+      
+      // Check if any date in the range is booked
+      let currentDate = new Date(start);
+      while (currentDate <= end) {
+        if (isDateBooked(currentDate)) {
+          error.value = 'One or more selected dates are not available';
+          form.value.startDate = '';
+          form.value.endDate = '';
+          return;
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      error.value = '';
+    };
+
+    const fetchBookedDates = async () => {
+      try {
+        const response = await axios.get(`/api/venue/${venueId}/booked-dates`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (response.data.bookings) {
+          // Store the booked dates
+          bookedDates.value = response.data.bookings.filter(booking => 
+            booking.status !== 'rejected'
+          );
+          console.log('Booked dates:', bookedDates.value); // Debug log
+        }
+      } catch (err) {
+        console.error('Error fetching booked dates:', err);
+      }
+    };
+
+    onMounted(() => {
+      fetchBookedDates();
+      // Refresh booked dates every minute to keep the calendar up to date
+      setInterval(fetchBookedDates, 60000);
+    });
+
+    return {
+      form,
       successMessage,
-      error, 
-      submitForm, 
-      dropdownVisible, 
+      error,
+      submitForm,
+      dropdownVisible,
       toggleDropdown,
-      venueId 
+      venueId,
+      bookedDates,
+      isDateBooked,
+      getCurrentDate,
+      validateDates,
+      fetchBookedDates
     };
   }
 };
@@ -363,5 +471,39 @@ footer {
   margin: 10px 0;
   border-radius: 4px;
   text-align: center;
+}
+
+.date-booked {
+  background-color: #ffebee !important;
+  border-color: #ef5350 !important;
+  color: #d32f2f !important;
+  cursor: not-allowed !important;
+  position: relative;
+}
+
+.date-booked::after {
+  content: '⚠️ Booked';
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: #d32f2f;
+}
+
+input[type="date"].date-booked::-webkit-calendar-picker-indicator {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+input[type="date"] {
+  background-color: white;
+  transition: all 0.3s ease;
+  padding-right: 35px;
+  position: relative;
+}
+
+.form-group {
+  position: relative;
 }
 </style>

@@ -111,14 +111,12 @@ export default {
           return;
         }
 
-        const response = await axios.get('/api/admin/bookings', {
+        const response = await axios.get('/api/admin/booking', {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Accept': 'application/json'
           }
         });
-
-        console.log('Response:', response.data); // Debug log
 
         if (response.data.status === 'success') {
           bookings.value = response.data.bookings;
@@ -145,17 +143,20 @@ export default {
 
     const updateStatus = async (bookingId, newStatus) => {
       try {
-        const response = await axios.put(`/api/admin/bookings/${bookingId}/status`, 
+        const response = await axios.put(`/api/admin/booking/${bookingId}/status`, 
           { status: newStatus },
           {
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Accept': 'application/json'
             }
           }
         );
 
         if (response.data.status === 'success') {
           await fetchBookings(); // Refresh the bookings list
+        } else {
+          throw new Error(response.data.message || 'Failed to update status');
         }
       } catch (err) {
         console.error('Error updating booking status:', err);
@@ -167,14 +168,17 @@ export default {
       if (!confirm('Are you sure you want to delete this booking?')) return;
 
       try {
-        const response = await axios.delete(`/api/admin/bookings/${bookingId}`, {
+        const response = await axios.delete(`/api/admin/booking/${bookingId}`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Accept': 'application/json'
           }
         });
 
         if (response.data.status === 'success') {
           await fetchBookings(); // Refresh the bookings list
+        } else {
+          throw new Error(response.data.message || 'Failed to delete booking');
         }
       } catch (err) {
         console.error('Error deleting booking:', err);
@@ -182,7 +186,11 @@ export default {
       }
     };
 
-    onMounted(fetchBookings);
+    onMounted(() => {
+      console.log('Admin role:', localStorage.getItem('userRole'));
+      console.log('Token:', localStorage.getItem('token'));
+      fetchBookings();
+    });
 
     return {
       bookings,

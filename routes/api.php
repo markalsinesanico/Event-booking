@@ -11,6 +11,3 @@ Route::get('/users/admins', [UserController::class, 'getAdmins'])->middleware('a
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/bookings/user/{userId}', [BookingController::class, 'getUserBookings']);
 });
-
-
-

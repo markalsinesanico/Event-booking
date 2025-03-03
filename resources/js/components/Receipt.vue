@@ -67,27 +67,37 @@ export default {
 
     const fetchBookings = async () => {
       try {
+        loading.value = true;
+        error.value = null;
+        
         // Get user data from localStorage
         const userData = JSON.parse(localStorage.getItem('user_data'));
+        const token = localStorage.getItem('token');
+        
+        console.log('Fetching bookings with:', { userData, token }); // Debug log
         
         if (!userData || !userData.id) {
           error.value = 'User data not found. Please log in again.';
+          loading.value = false;
           return;
         }
 
-        const response = await axios.get(`/bookings/user/${userData.id}`, {
+        // Update the endpoint to match the route in web.php
+        const response = await axios.get(`/api/booking/user/${userData.id}`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
           }
         });
         
-        if (response.data.status === 'success') {
-          // Sort bookings by date (most recent first)
+        console.log('Bookings response:', response.data); // Debug log
+
+        if (response.data.bookings) {
           bookings.value = response.data.bookings.sort((a, b) => {
             return new Date(b.created_at) - new Date(a.created_at);
           });
         } else {
-          error.value = 'Failed to load bookings. Please try again.';
+          error.value = 'No bookings found';
         }
       } catch (err) {
         console.error('Error fetching bookings:', err);
@@ -97,10 +107,8 @@ export default {
       }
     };
 
-    // Add a refresh method that can be called to reload bookings
-    const refreshBookings = () => {
-      loading.value = true;
-      error.value = null;
+    // Add this method to handle manual refresh
+    const handleRefresh = () => {
       fetchBookings();
     };
 
@@ -153,8 +161,26 @@ export default {
       printWindow.print();
     };
 
+    // Update onMounted to include error handling
     onMounted(() => {
-      fetchBookings();
+      try {
+        console.log('Component mounted');
+        const userData = localStorage.getItem('user_data');
+        const token = localStorage.getItem('token');
+        console.log('Initial data:', { userData, token });
+        
+        if (!userData || !token) {
+          error.value = 'Please login to view your bookings';
+          loading.value = false;
+          return;
+        }
+        
+        fetchBookings();
+      } catch (err) {
+        console.error('Mount error:', err);
+        error.value = 'Failed to initialize bookings';
+        loading.value = false;
+      }
     });
 
     return { 
@@ -163,7 +189,7 @@ export default {
       error, 
       printReceipt,
       formatDate,
-      refreshBookings
+      handleRefresh
     };
   }
 };

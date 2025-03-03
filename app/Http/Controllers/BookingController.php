@@ -71,29 +71,38 @@ class BookingController extends Controller
     public function getUserBookings($userId)
     {
         try {
+            \Log::info('Fetching bookings for user:', ['user_id' => $userId]);
+
             // Ensure user can only access their own bookings
             if (auth()->id() != $userId) {
+                \Log::warning('Unauthorized booking access attempt', [
+                    'requested_id' => $userId,
+                    'auth_id' => auth()->id()
+                ]);
                 return response()->json([
-                    'status' => 'error',
                     'message' => 'Unauthorized access'
                 ], 403);
             }
 
             $bookings = Booking::where('user_id', $userId)
-                ->with('venue') // Include venue details if needed
+                ->with(['venue']) // Include venue details
                 ->orderBy('created_at', 'desc')
                 ->get();
 
+            \Log::info('Bookings retrieved:', ['count' => $bookings->count()]);
+
             return response()->json([
-                'status' => 'success',
                 'bookings' => $bookings
             ]);
 
         } catch (\Exception $e) {
+            \Log::error('Error fetching user bookings:', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
-                'status' => 'error',
-                'message' => 'Failed to fetch bookings',
-                'error' => $e->getMessage()
+                'message' => 'Failed to fetch bookings: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -231,6 +240,27 @@ class BookingController extends Controller
             return response()->json([
                 'status' => 'error',
                 'message' => 'Failed to delete booking'
+            ], 500);
+        }
+    }
+
+    public function getBookedDates($venueId)
+    {
+        try {
+            $bookings = Booking::where('venue_id', $venueId)
+                ->where('status', '!=', 'rejected')
+                ->where('end_date', '>=', now())
+                ->select('start_date', 'end_date', 'status')
+                ->get();
+
+            return response()->json([
+                'status' => 'success',
+                'bookings' => $bookings
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to fetch booked dates'
             ], 500);
         }
     }
